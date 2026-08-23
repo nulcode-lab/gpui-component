@@ -1622,6 +1622,15 @@ impl InputState {
     }
 
     pub(super) fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
+        log::info!(
+            "[input] backspace: sel={:?} reversed={} marked={:?} selecting={} autoclose={} text_len={}",
+            self.selected_range,
+            self.selection_reversed,
+            self.ime_marked_range,
+            self.selecting,
+            self.autoclose_regions.len(),
+            self.text.len(),
+        );
         self.select_autoclose_pair(window, cx);
         if self.selected_range.is_empty() {
             self.select_to(self.previous_boundary(self.cursor()), cx)
@@ -1951,12 +1960,15 @@ let old_line = self.cursor_position().line;
         // Clear inline completion on any mouse interaction
         self.clear_inline_completion(cx);
 
-        // If there have IME marked range and is empty (Means pressed Esc to abort IME typing)
-        // Clear the marked range.
-        if let Some(ime_marked_range) = &self.ime_marked_range {
-            if ime_marked_range.len() == 0 {
-                self.ime_marked_range = None;
-            }
+        // Clear any IME marked range on mouse interaction. Previously only
+        // EMPTY marked ranges were cleared here; a non-empty stale marked
+        // range (e.g. left behind by an interrupted composition) would
+        // survive clicks forever, keeping its ghost selected_range invisible
+        // (selection painting is suppressed while a marked range exists)
+        // until a later Backspace deleted it wholesale.
+        if self.ime_marked_range.is_some() {
+            log::info!("[input] mousedown clearing ime_marked_range: {:?}", self.ime_marked_range);
+            self.ime_marked_range = None;
         }
 
         self.selecting = true;
@@ -3456,6 +3468,15 @@ impl EntityInputHandler for InputState {
         if self.disabled || self.readonly {
             return;
         }
+
+        log::info!(
+            "[input] replace_and_mark: range_utf16={:?} new_text={:?} new_sel_utf16={:?} cur_marked={:?} cur_sel={:?}",
+            range_utf16,
+            new_text,
+            new_selected_range_utf16,
+            self.ime_marked_range,
+            self.selected_range,
+        );
 
         self.lsp.reset();
 

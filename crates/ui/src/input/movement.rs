@@ -47,6 +47,12 @@ impl InputState {
         let offset = offset.clamp(0, self.text.len());
         self.cursor_line_end_affinity = false;
         self.invalidate_autoclose_regions();
+        // Cursor movement ends any (possibly stale) IME composition range;
+        // a leftover marked range keeps its ghost selected_range invisible.
+        if self.ime_marked_range.is_some() {
+            log::info!("[input] move_to clearing ime_marked_range: {:?}", self.ime_marked_range);
+            self.ime_marked_range = None;
+        }
         self.selected_range = (offset..offset).into();
         self.scroll_to(offset, direction, cx);
         self.pause_blink_cursor(cx);

@@ -2562,8 +2562,9 @@ impl<M: InputModeKind> Element for TextElement<M> {
             } else {
                 editor_style.border
             };
-            let separator_x =
-                input_bounds.origin.x + prepaint.last_layout.line_number_width - LINE_NUMBER_RIGHT_MARGIN;
+            // On the junction: the gutter background's right edge is exactly
+            // the code area's left edge (origin + line_number_width).
+            let separator_x = input_bounds.origin.x + prepaint.last_layout.line_number_width;
             window.paint_quad(fill(
                 Bounds::new(
                     point(separator_x, input_bounds.origin.y),

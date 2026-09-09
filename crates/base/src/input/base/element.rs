@@ -2364,9 +2364,11 @@ impl<M: InputModeKind> Element for TextElement<M> {
             window.paint_path(path.clone(), color);
         }
 
-        // Paint matched brace highlights
+        // Paint matched brace highlights. The caret color is the theme accent
+        // the fork's original `theme().primary` mapped to; `selection` is too
+        // faint at 30% opacity on light backgrounds.
         for path in prepaint.matched_brace_paths.iter() {
-            window.paint_path(path.clone(), editor_style.selection.opacity(0.3));
+            window.paint_path(path.clone(), editor_style.caret.opacity(0.3));
         }
 
         // Paint text with inline completion ghost line support

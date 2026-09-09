@@ -2914,9 +2914,11 @@ mod tests {
         let layout =
             EditorScrollbarLayout::new(input_bounds, px(40.), size(px(1000.), px(200.)), paddings);
 
+        // fork(algocode): LINE_NUMBER_RIGHT_MARGIN narrowed 10px -> 6px, so the
+        // scrollbar starts 4px further right and is 4px narrower.
         assert_eq!(
             layout.bounds,
-            Bounds::new(point(px(47.), px(18.)), size(px(266.), px(87.)))
+            Bounds::new(point(px(51.), px(18.)), size(px(262.), px(87.)))
         );
         assert_eq!(layout.scroll_size, size(px(976.), px(200.)));
 

@@ -2493,14 +2493,26 @@ impl<M: InputModeKind> Element for TextElement<M> {
 
             // The gutter is a fixed overlay above horizontally scrolling text.
             // Always give it an opaque editor background when the theme does not
-            // provide a dedicated gutter color, and cover the complete gutter so
-            // text cannot show through its right-side spacing/fold-icon area.
+            // provide a dedicated gutter color, and cover the gutter up to the
+            // separator so text cannot show through behind the line numbers.
             let gutter_bg = editor_style
                 .editor_gutter_background
                 .unwrap_or(editor_background);
+            // The separator hugs the line numbers (right after the digit area);
+            // the fold-icon zone and the right margin become breathing room on
+            // the code side of the line.
+            let fold_width = if self.state.read(cx).mode.is_folding() {
+                FOLD_ICON_HITBOX_WIDTH
+            } else {
+                px(0.)
+            };
+            let gutter_separator_width = prepaint.last_layout.line_number_width
+                - LINE_NUMBER_RIGHT_MARGIN
+                - fold_width
+                + px(4.);
             let gutter_bounds = editor_gutter_bounds(
                 input_bounds,
-                prepaint.last_layout.line_number_width,
+                gutter_separator_width,
                 prepaint.ghost_lines_height,
                 editor_paddings,
             );
@@ -2562,9 +2574,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
             } else {
                 editor_style.border
             };
-            // On the junction: the gutter background's right edge is exactly
-            // the code area's left edge (origin + line_number_width).
-            let separator_x = input_bounds.origin.x + prepaint.last_layout.line_number_width;
+            let separator_x = input_bounds.origin.x + gutter_separator_width;
             window.paint_quad(fill(
                 Bounds::new(
                     point(separator_x, input_bounds.origin.y),

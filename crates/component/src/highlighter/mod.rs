@@ -1,7 +1,9 @@
+mod language_name;
 pub use gpui_base::input::{
     Diagnostic, DiagnosticEntry, DiagnosticRelatedInformation, DiagnosticSet, DiagnosticSeverity,
     DiagnosticSummary, DiagnosticTag, RelatedInformation,
 };
+pub(crate) use language_name::language_name;
 
 mod diagnostic_styles;
 pub(crate) use diagnostic_styles::*;
@@ -18,7 +20,6 @@ pub(crate) fn input_highlighter_factory() -> gpui_base::input::InputHighlighterF
 
 // Native implementation with full tree-sitter support
 #[cfg(feature = "tree-sitter")]
-mod auto_indent;
 #[cfg(test)]
 mod bracket_query_test;
 

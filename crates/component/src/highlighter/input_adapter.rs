@@ -227,14 +227,6 @@ impl InputHighlighter for TreeSitterInputHighlighter {
         }))
     }
 
-    fn indent_suggestion(
-        &self,
-        text: &Rope,
-        cursor_offset: usize,
-    ) -> gpui_base::input::IndentSuggestion {
-        let highlighter = self.inner.borrow();
-        super::auto_indent::suggest_indent(highlighter.language(), &highlighter, text, cursor_offset)
-    }
 }
 
 /// Next `char` at `offset` in the rope, if any.

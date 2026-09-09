@@ -14,19 +14,7 @@ pub trait HighlightStyleResolver: Send + Sync {
     fn style(&self, name: &str) -> Option<HighlightStyle>;
 }
 
-/// Indent suggestion produced by a syntax-aware highlighter for Enter-key
-/// auto-indent. Adjusts relative to a basis row, optionally splitting a `{` line.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct IndentSuggestion {
-    /// How to adjust indent relative to basis_row: +1 more, 0 same, -1 less
-    pub delta: i32,
-    /// The row whose indent level to use as base
-    pub basis_row: usize,
-    /// If true, insert 2 newlines to split {} onto separate lines
-    pub split_brace: bool,
-}
-
-#[derive(Default)]
 struct NoHighlightStyles;
 
 impl HighlightStyleResolver for NoHighlightStyles {
@@ -91,17 +79,30 @@ pub trait InputHighlighter {
         None
     }
 
-    /// Syntax-aware indent suggestion for the line created by pressing Enter
-    /// at `cursor_offset` in `text`.
-    fn indent_suggestion(&self, text: &Rope, cursor_offset: usize) -> IndentSuggestion {
-        let _ = (text, cursor_offset);
-        IndentSuggestion::default()
-    }
 }
 
 pub type InputHighlighterFactory = Rc<dyn Fn(&str) -> Option<Box<dyn InputHighlighter>>>;
 pub type SharedHighlightStyleResolver = Arc<dyn HighlightStyleResolver>;
 pub type FoldIconRenderer = Rc<dyn Fn(usize, bool) -> AnyElement>;
+
+/// Where in the syntax tree an offset sits, for editing decisions.
+///
+/// Parser-independent: `gpui-component` answers from tree-sitter, apps may
+/// answer heuristically. `None` (no provider installed) means `Code`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyntaxContext {
+    Code,
+    String,
+    Comment,
+}
+
+/// Answers syntax context for editing decisions (pairing, skip, indent).
+///
+/// Created per editor by the application's [`super::LanguageProvider`].
+/// Base never imports a parser; implementations live in UI crates or apps.
+pub trait SyntaxContextProvider {
+    fn context_at(&self, text: &Rope, offset: usize) -> SyntaxContext;
+}
 
 #[derive(Clone, Copy, Default)]
 pub struct DiagnosticColors {

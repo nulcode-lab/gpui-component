@@ -10,6 +10,8 @@ use gpui::App;
 /// Character used by masked editor modes.
 pub(crate) const MASK_CHAR: char = '•';
 
+#[path = "editor/auto_close.rs"]
+mod auto_close;
 mod base;
 #[path = "base/blink_cursor.rs"]
 pub(crate) mod blink_cursor;
@@ -38,6 +40,10 @@ mod indent;
 mod input;
 #[path = "base/kind.rs"]
 mod kind;
+#[path = "editor/language.rs"]
+mod language;
+#[path = "editor/language_config.rs"]
+pub mod language_config;
 #[path = "base/layout.rs"]
 mod layout;
 #[path = "editor/lsp/mod.rs"]
@@ -69,8 +75,8 @@ pub(crate) fn init(cx: &mut App) {
 pub use crate::number_input::{NumberInputEvent, NumberStep};
 pub use base::{InputBase, InputContextMenuCapabilities, InputStyles};
 pub use bracket::{
-    BracketPair, get_bracket_pair_for_end, get_bracket_pair_for_start, is_bracket_end,
-    is_bracket_start, is_comment_or_string,
+    get_bracket_pair_for_end, get_bracket_pair_for_start, is_bracket_end, is_bracket_start,
+    is_comment_or_string,
 };
 pub use cursor::Selection;
 pub use decorations::{TextDecoration, TextDecorationCollection};
@@ -81,14 +87,18 @@ pub use diagnostics::{
 pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
 pub use editor::{Editor, EditorState};
 pub use highlighting::{
-    DiagnosticColors, FoldIconRenderer, HighlightStyleResolver, IndentSuggestion, InputEditorStyle,
-    InputHighlighter, InputHighlighterFactory, SharedHighlightStyleResolver,
+    DiagnosticColors, FoldIconRenderer, HighlightStyleResolver, InputEditorStyle, InputHighlighter,
+    InputHighlighterFactory, SharedHighlightStyleResolver, SyntaxContext, SyntaxContextProvider,
 };
 pub use indent::TabSize;
 pub use input::{Input, InputState};
 pub use kind::{
     EditorExtras, EditorMode, InputExtras, InputMode, InputModeKind, MultiLineMode, TextareaMode,
 };
+pub(crate) use language::EditorLanguage;
+pub use language::{LanguageProvider, set_language_config, set_language_provider};
+pub(crate) use language_config::LanguageConfig;
+pub use language_config::{AutoClosingPair, BracketPair, IndentationRules};
 pub use lsp::{
     CodeActionItem, CodeActionMenuState, CodeActionProvider, CompletionMenuOptions,
     CompletionMenuState, CompletionProvider, DefinitionProvider, DocumentColorProvider,

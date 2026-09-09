@@ -91,7 +91,6 @@ impl<M: InputModeKind> InputBaseState<M> {
         if self.ime_marked_range.is_some() {
             self.ime_marked_range = None;
         }
-        self.invalidate_autoclose_regions();
         self.set_cursor_to(offset);
         // Refresh the matched-brace highlight for the NEW cursor position.
         self.refresh_matching_brace_async(cx);

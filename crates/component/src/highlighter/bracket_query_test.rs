@@ -140,4 +140,42 @@ mod tests {
         // The pair right at the cursor (bar's parens), not foo's outer parens.
         assert_eq!(open.start, "foo(bar(".len() - 1);
     }
+
+    #[test]
+    fn dump_user_repro_incomplete_if_indented_close() {
+        // User's live repro: incomplete `if` (no parens) inside a for-body,
+        // close brace on its own indented line. The close-brace highlight
+        // box paints one cell LEFT of the `}`.
+        let buffer = "int main(){
+    for(int i = 0; i < 5; i++){
+        if
+    }
+    return 0;
+}
+";
+        let (highlighter, text) = parse(buffer);
+        let tree = highlighter.tree().cloned().expect("tree");
+        eprintln!("ROOT SEXP: {}", tree.root_node().to_sexp());
+
+        // Expected `}` on its own line (line index 3).
+        let line3 = text.line_start_offset(3);
+        let close_expected = line3 + 4; // 4-space indent, `}` at col 4
+        assert_eq!(&buffer[close_expected..close_expected + 1], "}");
+
+        let language = gpui::SharedString::from("cpp");
+        let cursor = text.line_start_offset(2) + "        if".len(); // end of `if`
+        let merged = innermost_bracket_pair_merged(&tree, &text, &language, cursor);
+        let query = crate::highlighter::highlighter::innermost_bracket_pair_from_tree(
+            &tree,
+            &text,
+            &language,
+            cursor,
+        );
+        // Both engines must agree on the for-pair: open `{` at 42, close `}`
+        // at 59 (its real byte position on the indented line) — the paint
+        // geometry relies on byte-exact offsets.
+        assert_eq!(merged, Some((42..43, 59..60)), "merged pair");
+        assert_eq!(query, Some((42..43, 59..60)), "query pair");
+        assert_eq!(merged.unwrap().1.start, close_expected);
+    }
 }

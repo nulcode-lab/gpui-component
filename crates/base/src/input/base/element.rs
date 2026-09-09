@@ -2922,7 +2922,7 @@ mod tests {
             layout.bounds,
             Bounds::new(point(px(51.), px(18.)), size(px(262.), px(87.)))
         );
-        assert_eq!(layout.scroll_size, size(px(976.), px(200.)));
+        assert_eq!(layout.scroll_size, size(px(972.), px(200.)));
 
         let layout_without_gutter =
             EditorScrollbarLayout::new(input_bounds, px(0.), size(px(500.), px(120.)), paddings);

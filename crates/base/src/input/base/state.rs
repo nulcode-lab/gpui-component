@@ -3271,6 +3271,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         if !self.is_editable() || edits.is_empty() {
             return;
         }
+        let was_ime = self.ime_marked_range.is_some();
 
         // Sort descending by start so applying front-of-vec first edits the
         // highest offsets first, leaving lower offsets unchanged.
@@ -3347,6 +3348,60 @@ impl<M: InputModeKind> InputBaseState<M> {
             );
 
             self.update_fold_candidates_incremental(range, new_text);
+
+            // After each edit, adjust matched_brace_ranges offsets by the edit
+            // delta (like Zed's anchor system: keep the highlight at the correct
+            // relative position until the async task verifies it). The fork's
+            // editor relies on this because every multi-line keystroke is
+            // applied through this batch path.
+            if let Some(pair) = self.matched_brace_ranges.take() {
+                let old_len = range.end - range.start;
+                let delta = new_text.len() as isize - old_len as isize;
+                let (mut open_start, open_len, mut close_start, close_len) = pair;
+                let bracket_edited = (open_start < range.end && open_start + open_len > range.start)
+                    || (close_start < range.end && close_start + close_len > range.start);
+                if bracket_edited {
+                    self.matched_brace_ranges = None;
+                } else if delta != 0 {
+                    if open_start >= range.start {
+                        open_start = (open_start as isize + delta) as usize;
+                    }
+                    if close_start >= range.start {
+                        close_start = (close_start as isize + delta) as usize;
+                    }
+                    self.matched_brace_ranges = Some((open_start, open_len, close_start, close_len));
+                } else {
+                    self.matched_brace_ranges = Some(pair);
+                }
+            }
+            // Adjust autoclose_region offsets after each edit.
+            if !self.autoclose_regions.is_empty() {
+                let old_len = range.end - range.start;
+                let delta = new_text.len() as isize - old_len as isize;
+                let mut i = 0;
+                while i < self.autoclose_regions.len() {
+                    let region_start = self.autoclose_regions[i].range.start;
+                    let region_edited = region_start >= range.start && region_start < range.end;
+                    // Invalidate region when text is inserted at exactly the region position
+                    // (e.g., typing a character between autoclose brackets like (a)).
+                    let region_at_insertion = delta > 0 && range.start == range.end && region_start == range.start;
+                    if region_edited || region_at_insertion {
+                        self.autoclose_regions.remove(i);
+                    } else if delta != 0 && region_start >= range.end {
+                        self.autoclose_regions[i].range.start =
+                            (region_start as isize + delta) as usize;
+                        i += 1;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            if *new_text == "}" && !self.silent_replace_text && self.is_code_editor() {
+                let close_row = self.text.offset_to_point(range.start + new_text.len()).row;
+                if let Some(open_row) = self.find_matching_open_brace_row(close_row) {
+                    cx.emit(InputEvent::TypingRightBrace { open_row, close_row });
+                }
+            }
         }
 
         if group {
@@ -3410,6 +3465,16 @@ impl<M: InputModeKind> InputBaseState<M> {
 
         self.ime_marked_range.take();
         self.update_preferred_column();
+        let is_bracket_related = edits.iter().any(|(_, text)| {
+            text.chars()
+                .any(|c| matches!(c, '{' | '}' | '[' | ']' | '(' | ')' | '<' | '>'))
+        });
+        if is_bracket_related || self.matched_brace_ranges.is_some() || was_ime {
+            self.refresh_matching_brace_async(cx);
+        }
+        if self.enable_rainbow_brackets {
+            self.rainbow_brackets_dirty = true;
+        }
         if self.is_multi_line() {
             self.mode.update_auto_grow(&self.display_map);
         }
@@ -7882,6 +7947,158 @@ mod tests {
         // One clipboard line per cursor.
         assert_cursors(&mut cx, &input, "x|1\ny|2\nz|3");
     }
+    use crate::input::{EditorState, FoldRange, HighlightStyleResolver, InputHighlighter, InputHighlighterFactory, InputEdit};
+
+    /// A parser-free highlighter stub whose bracket query re-scans the stored
+    /// text, so the matched-brace refresh wiring can be tested headlessly.
+    #[derive(Default)]
+    struct MockBraceHighlighter {
+        text: std::cell::RefCell<Rope>,
+    }
+
+    impl InputHighlighter for MockBraceHighlighter {
+        fn language(&self) -> gpui::SharedString {
+            "mock".into()
+        }
+
+        fn update(
+            &mut self,
+            _edit: Option<InputEdit>,
+            text: &Rope,
+            _folding: bool,
+            _window: &mut Window,
+            _cx: &mut Context<EditorState>,
+        ) {
+            *self.text.borrow_mut() = text.clone();
+        }
+
+        fn styles(
+            &self,
+            _range: &Range<usize>,
+            _resolver: &dyn HighlightStyleResolver,
+        ) -> Vec<(Range<usize>, gpui::HighlightStyle)> {
+            Vec::new()
+        }
+
+        fn fold_ranges(&self, _text: &Rope) -> Vec<FoldRange> {
+            Vec::new()
+        }
+
+        fn bracket_pair_task(
+            &self,
+            offset: usize,
+        ) -> Option<Box<dyn FnOnce() -> Option<(usize, usize, usize, usize)> + Send>> {
+            let bytes = self.text.borrow().to_string();
+            Some(Box::new(move || {
+                let mut stack: Vec<usize> = Vec::new();
+                let mut best: Option<(usize, usize, usize, usize)> = None;
+                let mut best_size = usize::MAX;
+                for (i, &b) in bytes.as_bytes().iter().enumerate() {
+                    if b == b'{' {
+                        stack.push(i);
+                    } else if b == b'}' {
+                        if let Some(open) = stack.pop()
+                            && offset >= open
+                            && offset <= i + 1
+                            && i - open < best_size
+                        {
+                            best_size = i - open;
+                            best = Some((open, 1, i, 1));
+                        }
+                    }
+                }
+                best
+            }))
+        }
+    }
+
+    // Regression: every multi-line keystroke is applied through the batch path
+    // (`replace_text_in_ranges`). The fork's tuned matched-brace behavior
+    // (offset delta-adjust + async refresh after each edit) must fire there,
+    // or the highlight box stays anchored to the pre-edit byte offsets.
+    #[gpui::test]
+    fn test_batch_edit_refreshes_matched_brace(cx: &mut TestAppContext) {
+        let view = InputView::build_editor(cx, |mut state| {
+            let factory: InputHighlighterFactory =
+                std::rc::Rc::new(|_| Some(Box::new(MockBraceHighlighter::default())));
+            state.mode.set_highlighter_factory(factory);
+            state
+        });
+        view.window_handle
+            .update(cx, |_, window, cx| {
+                view.input.update(cx, |state, cx| {
+                    state.set_value("int main(){
+    return 0;
+}
+", window, cx);
+                });
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        // Cursor inside main's body: the innermost pair is `{` at 10 / `}` at 26.
+        view.window_handle
+            .update(cx, |_, _, cx| {
+                view.input.update(cx, |state, _| state.set_selection(16, 16));
+            })
+            .unwrap();
+        view.window_handle
+            .update(cx, |_, _, cx| {
+                view.input
+                    .update(cx, |state, cx| state.refresh_matching_brace_async(cx));
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let initial = view
+            .input
+            .read_with(cx, |state, _| state.matched_brace_ranges)
+            .expect("initial matched pair");
+        assert_eq!(initial, (10, 1, 26, 1), "sanity: main's brace pair");
+
+        // Type two characters inside the pair through the batch path, as
+        // multi-line typing does: the close brace must follow the edit while
+        // the open brace (before the edit point) stays put, and the async
+        // refresh must re-verify against the fresh text.
+        view.window_handle
+            .update(cx, |_, window, cx| {
+                view.input.update(cx, |state, cx| {
+                    state.replace_text_in_ranges(&[(16..16, "xx".to_string())], window, cx);
+                });
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let after = view
+            .input
+            .read_with(cx, |state, _| state.matched_brace_ranges)
+            .expect("pair must survive a non-bracket edit");
+        assert_eq!(
+            after,
+            (initial.0, initial.1, initial.2 + 2, initial.3),
+            "close brace must follow the inner edit"
+        );
+
+        // A second inner edit shifts only the close brace again.
+        view.window_handle
+            .update(cx, |_, window, cx| {
+                view.input.update(cx, |state, cx| {
+                    state.replace_text_in_ranges(&[(20..20, "yy".to_string())], window, cx);
+                });
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let final_pair = view
+            .input
+            .read_with(cx, |state, _| state.matched_brace_ranges)
+            .expect("pair must survive the second edit");
+        assert_eq!(
+            final_pair,
+            (after.0, after.1, after.2 + 2, after.3),
+            "only the close brace follows an inner edit"
+        );
+    }
 }
 
 /// Methods that only a single-line input offers.
@@ -8251,4 +8468,6 @@ impl InputBaseState<crate::input::EditorMode> {
         }
         cx.notify();
     }
+
+
 }

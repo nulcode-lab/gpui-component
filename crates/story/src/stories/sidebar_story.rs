@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
-use gpui::{
-    Action, App, AppContext, ClickEvent, Context, Entity, Focusable, IntoElement, ParentElement,
-    Render, SharedString, Styled, Window, div, prelude::FluentBuilder, px, relative,
-};
+use gpui_kit::component::red_500;
+use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::*;
 
-use gpui_component::{
-    ActiveTheme, Icon, IconName, Selectable as _, Side, Sizable,
+use gpui_kit::component::{
+    ActiveTheme, Icon, IconName, Side, Sizable, StyledExt, ThemeStyled as _,
     badge::Badge,
     breadcrumb::{Breadcrumb, BreadcrumbItem},
-    button::{Button, ButtonGroup},
+    button::Button,
     h_flex,
     menu::DropdownMenu,
     separator::Separator,
@@ -26,6 +25,17 @@ use serde::Deserialize;
 #[action(namespace = sidebar_story, no_json)]
 pub struct SelectCompany(SharedString);
 
+#[derive(Action, Clone, PartialEq, Eq, Deserialize)]
+#[action(namespace = sidebar_story, no_json)]
+enum SidebarOption {
+    Icon,
+    Offcanvas,
+    None,
+    Right,
+    ClickToOpen,
+    DynamicChildren,
+}
+
 pub struct SidebarStory {
     active_items: HashMap<Item, bool>,
     last_active_item: Item,
@@ -35,7 +45,7 @@ pub struct SidebarStory {
     side: Side,
     click_to_open_submenu: bool,
     show_dynamic_children: bool,
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     checked: bool,
 }
 
@@ -65,76 +75,179 @@ impl SidebarStory {
     fn render_content(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         v_flex()
             .w_full()
-            .gap_3()
-            .child(
-                h_flex().w_full().items_center().child(
-                    ButtonGroup::new("collapsible-mode")
-                        .outline()
-                        .compact()
-                        .flex_shrink_0()
-                        .child(
-                            Button::new("collapsible-icon")
-                                .label("Icon")
-                                .selected(self.collapsible == SidebarCollapsible::Icon),
-                        )
-                        .child(
-                            Button::new("collapsible-offcanvas")
-                                .label("Offcanvas")
-                                .selected(self.collapsible == SidebarCollapsible::Offcanvas),
-                        )
-                        .child(
-                            Button::new("collapsible-none")
-                                .label("None")
-                                .selected(self.collapsible == SidebarCollapsible::None),
-                        )
-                        .on_click(cx.listener(|this, selecteds: &Vec<usize>, _, cx| {
-                            let Some(selected) = selecteds.first().copied() else {
-                                return;
-                            };
-
-                            this.collapsible = match selected {
-                                0 => SidebarCollapsible::Icon,
-                                1 => SidebarCollapsible::Offcanvas,
-                                2 => SidebarCollapsible::None,
-                                _ => return,
-                            };
-                            cx.notify();
-                        })),
-                ),
-            )
+            .min_h_0()
+            .flex_1()
+            .gap_4()
             .child(
                 h_flex()
                     .w_full()
-                    .items_center()
-                    .gap_3()
-                    .gap_y_2()
-                    .flex_wrap()
+                    .items_start()
+                    .justify_between()
+                    .gap_4()
                     .child(
-                        Switch::new("side")
-                            .label("Placement Right")
-                            .checked(self.side.is_right())
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.side = if *checked { Side::Right } else { Side::Left };
-                                cx.notify();
-                            })),
+                        v_flex()
+                            .min_w_0()
+                            .gap_1()
+                            .child(
+                                div()
+                                    .text_2xl()
+                                    .font_semibold()
+                                    .child(self.last_active_item.label()),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("A quick view of your workspace activity."),
+                            ),
                     )
                     .child(
-                        Switch::new("click-to-open")
-                            .checked(self.click_to_open_submenu)
-                            .label("Click to open submenu")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.click_to_open_submenu = *checked;
-                                cx.notify();
-                            })),
-                    )
+                        crate::story_toolbar_group()
+                            .w_auto()
+                            .flex_shrink_0()
+                            .dropdown_child(Button::new("sidebar-options").label("Options"), {
+                                let collapsible = self.collapsible;
+                                let right = self.side.is_right();
+                                let click_to_open = self.click_to_open_submenu;
+                                let dynamic_children = self.show_dynamic_children;
+                                move |menu, _, _| {
+                                    menu.menu_with_check(
+                                        "Icon mode",
+                                        collapsible == SidebarCollapsible::Icon,
+                                        Box::new(SidebarOption::Icon),
+                                    )
+                                    .menu_with_check(
+                                        "Offcanvas mode",
+                                        collapsible == SidebarCollapsible::Offcanvas,
+                                        Box::new(SidebarOption::Offcanvas),
+                                    )
+                                    .menu_with_check(
+                                        "Fixed mode",
+                                        collapsible == SidebarCollapsible::None,
+                                        Box::new(SidebarOption::None),
+                                    )
+                                    .separator()
+                                    .menu_with_check(
+                                        "Right Side",
+                                        right,
+                                        Box::new(SidebarOption::Right),
+                                    )
+                                    .menu_with_check(
+                                        "Click to Open",
+                                        click_to_open,
+                                        Box::new(SidebarOption::ClickToOpen),
+                                    )
+                                    .menu_with_check(
+                                        "Dynamic Children",
+                                        dynamic_children,
+                                        Box::new(SidebarOption::DynamicChildren),
+                                    )
+                                }
+                            }),
+                    ),
+            )
+            .child(
+                h_flex().w_full().gap_3().children(
+                    [
+                        ("Active projects", "12", "+2 this week"),
+                        ("Team members", "28", "4 online"),
+                        ("Tasks completed", "84%", "+6% this month"),
+                    ]
+                    .into_iter()
+                    .map(|(label, value, detail)| {
+                        v_flex()
+                            .min_w_0()
+                            .flex_1()
+                            .gap_2()
+                            .p_4()
+                            .rounded(cx.theme().radius_lg)
+                            .border_1()
+                            .border_color(cx.theme().border)
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(label),
+                            )
+                            .child(div().text_2xl().font_semibold().child(value))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(detail),
+                            )
+                    }),
+                ),
+            )
+            .child(
+                v_flex()
+                    .w_full()
+                    .min_h_0()
+                    .flex_1()
+                    .mt_2()
+                    .rounded(cx.theme().radius_lg)
+                    .border_1()
+                    .border_color(cx.theme().border)
                     .child(
-                        Switch::new("dynamic-children")
-                            .checked(self.show_dynamic_children)
-                            .label("Show dynamic children (test default_open)")
-                            .on_click(cx.listener(|this, checked: &bool, _, cx| {
-                                this.show_dynamic_children = *checked;
-                                cx.notify();
-                            })),
+                        h_flex()
+                            .items_center()
+                            .justify_between()
+                            .px_4()
+                            .py_2()
+                            .child(div().font_medium().child("Recent activity"))
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("Today"),
+                            ),
+                    )
+                    .child(Separator::horizontal())
+                    .children(
+                        [
+                            (
+                                IconName::CircleCheck,
+                                "Design review completed",
+                                "12 minutes ago",
+                            ),
+                            (IconName::File, "Project brief updated", "1 hour ago"),
+                            (
+                                IconName::CircleUser,
+                                "Maya joined the workspace",
+                                "3 hours ago",
+                            ),
+                        ]
+                        .into_iter()
+                        .map(|(icon, title, time)| {
+                            h_flex()
+                                .items_center()
+                                .gap_3()
+                                .px_4()
+                                .py_3()
+                                .child(
+                                    div()
+                                        .size_8()
+                                        .flex()
+                                        .items_center()
+                                        .justify_center()
+                                        .rounded_full_style(cx)
+                                        .bg(cx.theme().muted)
+                                        .child(Icon::new(icon).small()),
+                                )
+                                .child(
+                                    v_flex()
+                                        .min_w_0()
+                                        .flex_1()
+                                        .gap_0p5()
+                                        .child(div().text_sm().child(title))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .text_color(cx.theme().muted_foreground)
+                                                .child(time),
+                                        ),
+                                )
+                        }),
                     ),
             )
     }
@@ -312,7 +425,7 @@ impl super::Story for SidebarStory {
 }
 
 impl Focusable for SidebarStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &gpui_kit::App) -> gpui_kit::FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -320,9 +433,9 @@ impl Focusable for SidebarStory {
 impl Render for SidebarStory {
     fn render(
         &mut self,
-        window: &mut gpui::Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> impl gpui::IntoElement {
+        window: &mut gpui_kit::Window,
+        cx: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
         let groups: [Vec<Item>; 2] = [
             vec![
                 Item::Playground,
@@ -341,6 +454,27 @@ impl Render for SidebarStory {
         let toggle_collapsed = self.collapsed && collapsible != SidebarCollapsible::None;
 
         h_flex()
+            .on_action(cx.listener(|this, action: &SidebarOption, _, cx| {
+                match action {
+                    SidebarOption::Icon => this.collapsible = SidebarCollapsible::Icon,
+                    SidebarOption::Offcanvas => this.collapsible = SidebarCollapsible::Offcanvas,
+                    SidebarOption::None => this.collapsible = SidebarCollapsible::None,
+                    SidebarOption::Right => {
+                        this.side = if this.side.is_right() {
+                            Side::Left
+                        } else {
+                            Side::Right
+                        }
+                    }
+                    SidebarOption::ClickToOpen => {
+                        this.click_to_open_submenu = !this.click_to_open_submenu
+                    }
+                    SidebarOption::DynamicChildren => {
+                        this.show_dynamic_children = !this.show_dynamic_children
+                    }
+                }
+                cx.notify();
+            }))
             .rounded(cx.theme().radius)
             .border_1()
             .border_color(cx.theme().border)
@@ -418,12 +552,15 @@ impl Render for SidebarStory {
                                     .active(is_active)
                                     .default_open(ix == 0)
                                     .click_to_open(self.click_to_open_submenu)
+                                    .when(is_active, |this| {
+                                        this.border_1().border_color(Hsla::white())
+                                    })
                                     .when(ix == 0, |this| {
                                         this.context_menu({
                                             move |this, _, _| {
                                                 this.link(
                                                     "About",
-                                                    "https://github.com/longbridge/gpui-component",
+                                                    "https://github.com/longbridge/gpui-kit",
                                                 )
                                             }
                                         })
@@ -447,6 +584,10 @@ impl Render for SidebarStory {
                                                                 ))
                                                         }
                                                     })
+                                                    .label_style(
+                                                        StyleRefinement::default()
+                                                            .text_color(red_500()),
+                                                    )
                                                     .context_menu({
                                                         move |this, _, _| {
                                                             this.label("This is a label")

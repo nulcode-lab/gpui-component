@@ -1,5 +1,5 @@
-use gpui::*;
-use gpui_component::{ActiveTheme as _, Root, StyledExt as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Root, StyledExt as _, h_flex, v_flex};
+use gpui_kit::*;
 
 struct RootBorderlessExample;
 
@@ -30,7 +30,7 @@ impl Render for RootBorderlessExample {
                     .gap_3()
                     .child(
                         div()
-                            .rounded_md()
+                            .rounded(cx.theme().radius)
                             .border_1()
                             .border_color(cx.theme().border)
                             .px_3()
@@ -39,7 +39,7 @@ impl Render for RootBorderlessExample {
                     )
                     .child(
                         div()
-                            .rounded_md()
+                            .rounded(cx.theme().radius)
                             .border_1()
                             .border_color(cx.theme().border)
                             .px_3()
@@ -51,8 +51,8 @@ impl Render for RootBorderlessExample {
 }
 
 fn main() {
-    gpui_platform::application().run(move |cx| {
-        gpui_component::init(cx);
+    gpui_kit::application().run(move |cx| {
+        gpui_kit::init(cx);
 
         let window_options = WindowOptions {
             titlebar: None,

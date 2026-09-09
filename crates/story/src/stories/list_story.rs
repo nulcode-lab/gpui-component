@@ -1,24 +1,35 @@
 use std::{rc::Rc, time::Duration};
 
 use fake::Fake;
-use gpui::{
-    App, AppContext, Context, DragMoveEvent, ElementId, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, ScrollStrategy,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, Task, Window, actions, div,
-    prelude::FluentBuilder as _, px,
-};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::*;
 
-use gpui_component::{
-    ActiveTheme, Icon, IconName, IndexPath, Selectable, Sizable,
+use gpui_kit::component::{
+    ActiveTheme, Icon, IconName, IndexPath, Selectable, ThemeStyled as _,
     button::Button,
-    checkbox::Checkbox,
     h_flex,
     label::Label,
     list::{List, ListDelegate, ListEvent, ListItem, ListState},
     v_flex,
 };
 
-actions!(list_story, [SelectedCompany]);
+use crate::story_toolbar_group;
+
+actions!(
+    list_story,
+    [
+        SelectedCompany,
+        ToggleSelectable,
+        ToggleSearchable,
+        ToggleLoading,
+        ToggleLazyLoad,
+        ToggleDraggable,
+        GoToTop,
+        GoToSelected,
+        GoToRow,
+        GoToBottom
+    ]
+);
 
 #[derive(Clone, Default)]
 struct Company {
@@ -172,7 +183,7 @@ impl RenderOnce for CompanyListItem {
                                 .left_0()
                                 .right_0()
                                 .h(px(2.))
-                                .rounded_full()
+                                .rounded_full_style(cx)
                                 .bg(cx.theme().blue);
 
                             this.child(match position {
@@ -235,6 +246,9 @@ struct CompanyListDelegate {
 impl CompanyListDelegate {
     fn prepare(&mut self, query: impl Into<SharedString>) {
         self.query = query.into();
+        for companies in &mut self.matched_companies {
+            companies.clear();
+        }
         let companies: Vec<Rc<Company>> = self
             ._companies
             .iter()
@@ -582,7 +596,7 @@ impl ListStory {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let mut delegate = CompanyListDelegate {
             industries: vec![],
-            matched_companies: vec![vec![]],
+            matched_companies: vec![],
             _companies: vec![],
             selected_index: Some(IndexPath::default()),
             confirmed_index: None,
@@ -683,7 +697,7 @@ fn random_company() -> Company {
 }
 
 impl Focusable for ListStory {
-    fn focus_handle(&self, _cx: &gpui::App) -> FocusHandle {
+    fn focus_handle(&self, _cx: &gpui_kit::App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }
@@ -696,127 +710,96 @@ impl Render for ListStory {
         v_flex()
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::selected_company))
+            .on_action(cx.listener(|this, _: &ToggleSelectable, window, cx| {
+                this.toggle_selectable(!this.selectable, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleSearchable, window, cx| {
+                this.toggle_searchable(!this.searchable, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &ToggleLoading, _, cx| {
+                this.company_list.update(cx, |list, cx| {
+                    list.delegate_mut().loading = !list.delegate().loading;
+                    cx.notify();
+                });
+            }))
+            .on_action(cx.listener(|this, _: &ToggleLazyLoad, _, cx| {
+                this.company_list.update(cx, |list, cx| {
+                    list.delegate_mut().lazy_load = !list.delegate().lazy_load;
+                    cx.notify();
+                });
+            }))
+            .on_action(cx.listener(|this, _: &ToggleDraggable, _, cx| {
+                this.company_list.update(cx, |list, cx| {
+                    list.delegate_mut().draggable = !list.delegate().draggable;
+                    cx.notify();
+                });
+            }))
+            .on_action(cx.listener(|this, action: &GoToTop, window, cx| {
+                let _ = action;
+                this.company_list.update(cx, |list, cx| {
+                    list.scroll_to_item(IndexPath::default(), ScrollStrategy::Top, window, cx);
+                });
+            }))
+            .on_action(cx.listener(|this, _: &GoToSelected, window, cx| {
+                this.company_list.update(cx, |list, cx| {
+                    list.scroll_to_selected_item(window, cx);
+                });
+            }))
+            .on_action(cx.listener(|this, _: &GoToRow, window, cx| {
+                this.company_list.update(cx, |list, cx| {
+                    list.scroll_to_item(
+                        IndexPath::new(1).section(5),
+                        ScrollStrategy::Center,
+                        window,
+                        cx,
+                    );
+                });
+            }))
+            .on_action(cx.listener(|this, _: &GoToBottom, window, cx| {
+                this.company_list.update(cx, |list, cx| {
+                    let last_section = list.delegate().sections_count(cx).saturating_sub(1);
+                    let last_row = list
+                        .delegate()
+                        .items_count(last_section, cx)
+                        .saturating_sub(1);
+                    list.scroll_to_item(
+                        IndexPath::default().section(last_section).row(last_row),
+                        ScrollStrategy::Top,
+                        window,
+                        cx,
+                    );
+                });
+            }))
             .size_full()
             .gap_4()
             .child(
-                h_flex()
-                    .gap_2()
-                    .child(
-                        Button::new("scroll-top")
-                            .outline()
-                            .child("Scroll to Top")
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_item(
-                                        IndexPath::default(),
-                                        ScrollStrategy::Top,
-                                        window,
-                                        cx,
-                                    );
-                                    cx.notify();
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("scroll-selected")
-                            .outline()
-                            .child("Scroll to selected")
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_selected_item(window, cx);
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("scroll-to-item")
-                            .outline()
-                            .child("Scroll to (5, 1)")
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.company_list.update(cx, |list, cx| {
-                                    list.scroll_to_item(
-                                        IndexPath::new(1).section(5),
-                                        ScrollStrategy::Center,
-                                        window,
-                                        cx,
-                                    );
-                                })
-                            })),
-                    )
-                    .child(
-                        Button::new("scroll-bottom")
-                            .outline()
-                            .child("Scroll to Bottom")
-                            .small()
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.company_list.update(cx, |list, cx| {
-                                    let last_section =
-                                        list.delegate().sections_count(cx).saturating_sub(1);
-
-                                    list.scroll_to_item(
-                                        IndexPath::default().section(last_section).row(
-                                            list.delegate()
-                                                .items_count(last_section, cx)
-                                                .saturating_sub(1),
-                                        ),
-                                        ScrollStrategy::Top,
-                                        window,
-                                        cx,
-                                    );
-                                })
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("selectable")
-                            .label("Selectable")
-                            .checked(self.selectable)
-                            .on_click(cx.listener(|this, check: &bool, window, cx| {
-                                this.toggle_selectable(*check, window, cx)
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("searchable")
-                            .label("Searchable")
-                            .checked(self.searchable)
-                            .on_click(cx.listener(|this, check: &bool, window, cx| {
-                                this.toggle_searchable(*check, window, cx)
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("loading")
-                            .label("Loading")
-                            .checked(self.company_list.read(cx).delegate().loading)
-                            .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.company_list.update(cx, |this, cx| {
-                                    this.delegate_mut().loading = *check;
-                                    cx.notify();
-                                })
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("lazy_load")
-                            .label("Lazy Load")
-                            .checked(lazy_load)
-                            .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.company_list.update(cx, |this, cx| {
-                                    this.delegate_mut().lazy_load = *check;
-                                    cx.notify();
-                                })
-                            })),
-                    )
-                    .child(
-                        Checkbox::new("draggable")
-                            .label("Draggable")
-                            .checked(draggable)
-                            .on_click(cx.listener(|this, check: &bool, _, cx| {
-                                this.company_list.update(cx, |this, cx| {
-                                    this.delegate_mut().draggable = *check;
-                                    cx.notify();
-                                })
-                            })),
-                    ),
+                story_toolbar_group()
+                    .dropdown_child(Button::new("go-to").label("Go To"), |menu, _, _| {
+                        menu.menu("Top", Box::new(GoToTop))
+                            .menu("Selected", Box::new(GoToSelected))
+                            .menu("Section 5, Row 1", Box::new(GoToRow))
+                            .menu("Bottom", Box::new(GoToBottom))
+                    })
+                    .dropdown_child(Button::new("list-options").label("Options"), {
+                        let selectable = self.selectable;
+                        let searchable = self.searchable;
+                        let loading = self.company_list.read(cx).delegate().loading;
+                        move |menu, _, _| {
+                            menu.menu_with_check(
+                                "Selectable",
+                                selectable,
+                                Box::new(ToggleSelectable),
+                            )
+                            .menu_with_check("Searchable", searchable, Box::new(ToggleSearchable))
+                            .menu_with_check("Loading", loading, Box::new(ToggleLoading))
+                            .menu_with_check("Lazy Load", lazy_load, Box::new(ToggleLazyLoad))
+                            .menu_with_check(
+                                "Draggable",
+                                draggable,
+                                Box::new(ToggleDraggable),
+                            )
+                        }
+                    }),
             )
             .child(
                 List::new(&self.company_list)
@@ -827,5 +810,74 @@ impl Render for ListStory {
                     .border_color(cx.theme().border)
                     .rounded(cx.theme().radius),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::prelude::v1::test;
+
+    #[test]
+    fn searching_and_refreshing_replace_company_groups() {
+        let companies = [
+            ("Acme", "Software"),
+            ("Books", "Retail"),
+            ("Atlas", "Software"),
+        ]
+        .into_iter()
+        .map(|(name, industry)| {
+            Rc::new(Company {
+                name: name.into(),
+                industry: industry.into(),
+                ..Company::default()
+            })
+        })
+        .collect();
+        let mut delegate = CompanyListDelegate {
+            industries: vec![],
+            matched_companies: vec![],
+            _companies: companies,
+            selected_index: None,
+            confirmed_index: None,
+            query: "".into(),
+            loading: false,
+            eof: false,
+            lazy_load: false,
+            draggable: false,
+            drop_target: None,
+        };
+
+        for (query, expected) in [
+            ("", vec![vec!["Acme", "Atlas"], vec!["Books"]]),
+            ("ACME", vec![vec!["Acme"], vec![]]),
+            ("missing", vec![vec![], vec![]]),
+            ("", vec![vec!["Acme", "Atlas"], vec!["Books"]]),
+        ] {
+            delegate.prepare(query);
+            assert_eq!(delegate.industries, vec!["Software", "Retail"]);
+            assert_eq!(delegate.matched_companies.len(), delegate.industries.len());
+            let names: Vec<Vec<&str>> = delegate
+                .matched_companies
+                .iter()
+                .map(|companies| {
+                    companies
+                        .iter()
+                        .map(|company| company.name.as_ref())
+                        .collect()
+                })
+                .collect();
+            assert_eq!(names, expected);
+        }
+        // Loading more data also rebuilds the current query; it must not duplicate old rows.
+        delegate.extend_more(0);
+        assert_eq!(
+            delegate
+                .matched_companies
+                .iter()
+                .map(Vec::len)
+                .sum::<usize>(),
+            3
+        );
     }
 }

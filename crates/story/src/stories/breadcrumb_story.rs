@@ -1,9 +1,9 @@
-use gpui::{
+use gpui_kit::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window, prelude::FluentBuilder as _,
+    Styled, Window, prelude::FluentBuilder as _, px,
 };
 
-use gpui_component::{
+use gpui_kit::component::{
     breadcrumb::{Breadcrumb, BreadcrumbItem},
     v_flex,
 };
@@ -11,7 +11,7 @@ use gpui_component::{
 use crate::section;
 
 pub struct BreadcrumbStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
     clicked_item: Option<String>,
 }
 
@@ -53,44 +53,50 @@ impl Render for BreadcrumbStory {
         v_flex()
             .gap_6()
             .child(
-                section("Basic Breadcrumb").max_w_md().child(
-                    Breadcrumb::new()
-                        .child("Home")
-                        .child("Documents")
-                        .child("Projects"),
-                ),
+                section("Default")
+                    .description("Shows the current location in a hierarchy.")
+                    .w(px(480.))
+                    .child(
+                        Breadcrumb::new()
+                            .child("Home")
+                            .child("Documents")
+                            .child("Projects"),
+                    ),
             )
             .child(
-                section("Click Handlers").max_w_md().child(
-                    v_flex()
-                        .gap_4()
-                        .items_center()
-                        .child(
-                            Breadcrumb::new()
-                                .child("Home")
-                                .child(BreadcrumbItem::new("Documents").on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.clicked_item = Some("Documents".to_string());
-                                        cx.notify();
-                                    },
-                                )))
-                                .child(BreadcrumbItem::new("Projects").on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.clicked_item = Some("Projects".to_string());
-                                        cx.notify();
-                                    },
-                                )))
-                                .child(BreadcrumbItem::new("Current").on_click(cx.listener(
-                                    |this, _, _, cx| {
-                                        this.clicked_item = Some("Current".to_string());
-                                        cx.notify();
-                                    },
-                                ))),
-                        )
-                        .when_some(self.clicked_item.clone(), |this, item| {
-                            this.child(format!("Clicked: {}", item))
-                        }),
-                ),
+                section("Interactive")
+                    .description("Earlier levels can respond to navigation clicks.")
+                    .w(px(480.))
+                    .child(
+                        v_flex()
+                            .gap_4()
+                            .items_center()
+                            .child(
+                                Breadcrumb::new()
+                                    .child("Home")
+                                    .child(BreadcrumbItem::new("Documents").on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            this.clicked_item = Some("Documents".to_string());
+                                            cx.notify();
+                                        },
+                                    )))
+                                    .child(BreadcrumbItem::new("Projects").on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            this.clicked_item = Some("Projects".to_string());
+                                            cx.notify();
+                                        },
+                                    )))
+                                    .child(BreadcrumbItem::new("Current").on_click(cx.listener(
+                                        |this, _, _, cx| {
+                                            this.clicked_item = Some("Current".to_string());
+                                            cx.notify();
+                                        },
+                                    ))),
+                            )
+                            .when_some(self.clicked_item.clone(), |this, item| {
+                                this.child(format!("Selected: {}", item))
+                            }),
+                    ),
             )
     }
 }

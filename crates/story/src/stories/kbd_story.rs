@@ -1,14 +1,14 @@
-use gpui::{
+use gpui_kit::{
     App, AppContext, Context, Entity, Focusable, IntoElement, Keystroke, ParentElement, Render,
-    Styled, Window,
+    Styled, Window, px,
 };
 
-use gpui_component::{h_flex, kbd::Kbd, v_flex};
+use gpui_kit::component::{h_flex, kbd::Kbd, v_flex};
 
 use crate::section;
 
 pub struct KbdStory {
-    focus_handle: gpui::FocusHandle,
+    focus_handle: gpui_kit::FocusHandle,
 }
 
 impl super::Story for KbdStory {
@@ -37,36 +37,50 @@ impl KbdStory {
     }
 }
 impl Focusable for KbdStory {
-    fn focus_handle(&self, _: &gpui::App) -> gpui::FocusHandle {
+    fn focus_handle(&self, _: &gpui_kit::App) -> gpui_kit::FocusHandle {
         self.focus_handle.clone()
     }
 }
 impl Render for KbdStory {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         v_flex()
+            .w_full()
+            .items_center()
             .gap_6()
             .child(
-                section("Kbd").child(
-                    h_flex()
-                        .gap_2()
-                        .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("cmd--").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("cmd-+").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("escape").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("/").unwrap()))
-                        .child(Kbd::new(Keystroke::parse("enter").unwrap())),
-                ),
+                section("Default")
+                    .description("Displays single keys and multi-key shortcuts.")
+                    .w(px(560.))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_center()
+                            .gap_2()
+                            .flex_wrap()
+                            .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("cmd--").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("cmd-+").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("escape").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("backspace").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("/").unwrap()))
+                            .child(Kbd::new(Keystroke::parse("enter").unwrap())),
+                    ),
             )
             .child(
-                section("Outline Style").child(
-                    h_flex()
-                        .gap_2()
-                        .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()).outline())
-                        .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()).outline())
-                        .child(Kbd::new(Keystroke::parse("enter").unwrap()).outline()),
-                ),
+                section("Outlined")
+                    .description("An outlined treatment adds emphasis on dense surfaces.")
+                    .w(px(560.))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_center()
+                            .gap_2()
+                            .flex_wrap()
+                            .child(Kbd::new(Keystroke::parse("cmd-shift-p").unwrap()).outline())
+                            .child(Kbd::new(Keystroke::parse("cmd-ctrl-t").unwrap()).outline())
+                            .child(Kbd::new(Keystroke::parse("enter").unwrap()).outline()),
+                    ),
             )
     }
 }

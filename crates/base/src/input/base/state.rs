@@ -9129,6 +9129,45 @@ mod tests {
         }
     }
 
+    // Regression: pressing Down from the end of a long line onto a shorter
+    // line must land at the SHORT line's end (column clamped), not its start.
+    #[gpui::test]
+    fn test_down_from_long_line_clamps_to_short_line_end(cx: &mut TestAppContext) {
+        let view = InputView::build_editor(cx, |state| state);
+        let text = "int main(){\n    if(x == 5){\n        int a;\n        cin >> a;\n    }\n    return 0;\n}\n";
+        view.window_handle
+            .update(cx, |_, window, cx| {
+                view.input.update(cx, |state, cx| {
+                    state.set_value(text, window, cx);
+                });
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        // Cursor at the end of line 3 ("        cin >> a;").
+        let line3_end = "int main(){\n    if(x == 5){\n        int a;\n        cin >> a;".len();
+        view.window_handle
+            .update(cx, |_, _, cx| {
+                view.input.update(cx, |state, _| state.set_selection(line3_end, line3_end));
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        // Press Down.
+        view.window_handle
+            .update(cx, |_, window, cx| {
+                view.input.update(cx, |state, cx| state.down(&MoveDown, window, cx));
+            })
+            .unwrap();
+        cx.run_until_parked();
+
+        let cursor = view.input.read_with(cx, |state, _| state.cursor());
+        let line4_end = "int main(){\n    if(x == 5){\n        int a;\n        cin >> a;\n    }".len();
+        assert_eq!(
+            cursor, line4_end,
+            "Down from a long line must clamp to the end of the short line"
+        );
+    }
     // Regression: every multi-line keystroke is applied through the batch path
     // (`replace_text_in_ranges`). The fork's tuned matched-brace behavior
     // (offset delta-adjust + async refresh after each edit) must fire there,

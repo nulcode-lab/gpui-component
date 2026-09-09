@@ -146,32 +146,48 @@ impl<M: InputModeKind> InputBaseState<M> {
         let mut new_offset = self.display_map.wrap_display_point_to_offset(display_point);
 
         let mut new_affinity = false;
-        if let Some((preferred_x, column)) = column_anchor {
-            // Get display point again to update local_row.
-            let mut next_display_point = self.display_map.offset_to_wrap_display_point(new_offset);
-            next_display_point.column = 0;
-            let next_point = self
-                .display_map
-                .wrap_display_point_to_point(next_display_point);
-            let line_start_offset = self.text.line_start_offset(next_point.row);
+        match column_anchor {
+            Some((preferred_x, column)) => {
+                // Get display point again to update local_row.
+                let mut next_display_point =
+                    self.display_map.offset_to_wrap_display_point(new_offset);
+                next_display_point.column = 0;
+                let next_point = self
+                    .display_map
+                    .wrap_display_point_to_point(next_display_point);
+                let line_start_offset = self.text.line_start_offset(next_point.row);
 
-            // If in visible range, prefer to use position to get column.
-            if let Some(line) = last_layout.line(next_point.row) {
-                if let Some((x, line_end_affinity)) = line.closest_index_for_position(
-                    Point {
-                        x: preferred_x,
-                        y: next_display_point.local_row * last_layout.line_height,
-                    },
-                    last_layout,
-                ) {
-                    new_offset = line_start_offset + x;
-                    // Landing on a wrap boundary means the preferred column pointed past the
-                    // last glyph of the target row, so the caret stays on that row.
-                    new_affinity = line_end_affinity;
+                // If in visible range, prefer to use position to get column.
+                if let Some(line) = last_layout.line(next_point.row) {
+                    if let Some((x, line_end_affinity)) = line.closest_index_for_position(
+                        Point {
+                            x: preferred_x,
+                            y: next_display_point.local_row * last_layout.line_height,
+                        },
+                        last_layout,
+                    ) {
+                        new_offset = line_start_offset + x;
+                        // Landing on a wrap boundary means the preferred column pointed past the
+                        // last glyph of the target row, so the caret stays on that row.
+                        new_affinity = line_end_affinity;
+                    }
+                } else {
+                    // Not in visible range, use column directly.
+                    let max_line_len = self.text.slice_line(next_point.row).len();
+                    new_offset = line_start_offset + column.min(max_line_len);
                 }
-            } else {
-                // Not in visible range, use column directly.
-                let max_line_len = self.text.slice_line(next_point.row).len();
+            }
+            None => {
+                // No painted-layout anchor: it is dropped right after an edit,
+                // when the painted layout still lags the buffer and
+                // position_for_index finds no glyph for the caret column, so
+                // update_preferred_column could not measure pixels. Hold the
+                // caret's own character column against the target line's real
+                // length instead of jumping to the line start.
+                let column = self.text.offset_to_point(offset).column;
+                let target_row = self.text.offset_to_point(new_offset).row;
+                let line_start_offset = self.text.line_start_offset(target_row);
+                let max_line_len = self.text.slice_line(target_row).len();
                 new_offset = line_start_offset + column.min(max_line_len);
             }
         }

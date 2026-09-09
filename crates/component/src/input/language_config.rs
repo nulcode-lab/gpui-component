@@ -52,8 +52,15 @@ fn default_language_config(language: &str) -> LanguageConfig {
         )
     });
     static CPP_INDENT: LazyLock<IndentationRules> = LazyLock::new(|| {
+        // Increase after a line that opens a block/paren (`{`, `(`, `[` at the
+        // end), a control statement whose condition closes on the same line
+        // (`if (x == a)`), a dangling `else`/`do`/`try`, a `case ...:` label,
+        // or an access specifier.
         IndentationRules::new(
-            Regex::new(r"[\{\(]\s*$").unwrap(),
+            Regex::new(
+                r"([{(\[]\s*$)|(^\s*\}?\s*(if|for|while|switch|catch)\s*\(.*\)\s*$)|(^\s*\}?\s*(else|do|try)(\s+if\s*\(.*\))?\s*$)|(^\s*(case\b.*|default|public|private|protected)\s*:\s*$)",
+            )
+            .unwrap(),
             Regex::new(r"^\s*[\}\)\]]").unwrap(),
         )
     });
@@ -102,6 +109,33 @@ mod tests {
                 .iter()
                 .all(|p| p.open.as_ref() != "'" && p.open.as_ref() != "(")
         );
+    }
+
+    #[test]
+    fn cpp_indent_follows_control_statements_and_blocks() {
+        let rules = default_language_config("cpp");
+        let rules = rules.indentation_rules.unwrap();
+        let inc = rules.increase_indent_pattern.as_ref().unwrap();
+        let dec = rules.decrease_indent_pattern.as_ref().unwrap();
+
+        // Control statements whose condition closes on the same line.
+        for line in ["if(x == a)", "  if (x == a)", "for(int i = 0; i < n; i++)",
+                     "while (x--)", "switch (v)", "} else", "else if (y)"] {
+            assert!(inc.is_match(line), "increase must match {line:?}");
+        }
+        // Blocks and dangling keywords.
+        for line in ["int main(){", "if (x) {", "    do", "else", "case 1:", "default:",
+                     "public:", "struct S {"] {
+            assert!(inc.is_match(line), "increase must match {line:?}");
+        }
+        // Ordinary lines must not increase.
+        for line in ["return 0;", "int x = f(a, b);", "x++;", "int main()"] {
+            assert!(!inc.is_match(line), "increase must not match {line:?}");
+        }
+        // A closing delimiter starts a dedented line.
+        for line in ["}", "  }", ")", "]"] {
+            assert!(dec.is_match(line), "decrease must match {line:?}");
+        }
     }
 
     #[test]

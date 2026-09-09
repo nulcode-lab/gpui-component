@@ -16,7 +16,7 @@ pub trait HighlightStyleResolver: Send + Sync {
 
 /// Indent suggestion produced by a syntax-aware highlighter for Enter-key
 /// auto-indent. Adjusts relative to a basis row, optionally splitting a `{` line.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct IndentSuggestion {
     /// How to adjust indent relative to basis_row: +1 more, 0 same, -1 less
     pub delta: i32,
@@ -24,16 +24,6 @@ pub struct IndentSuggestion {
     pub basis_row: usize,
     /// If true, insert 2 newlines to split {} onto separate lines
     pub split_brace: bool,
-}
-
-impl Default for IndentSuggestion {
-    fn default() -> Self {
-        Self {
-            delta: 0,
-            basis_row: 0,
-            split_brace: false,
-        }
-    }
 }
 
 #[derive(Default)]

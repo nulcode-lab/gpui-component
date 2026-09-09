@@ -17,7 +17,7 @@ use gpui_base::input::{
 use ropey::Rope;
 use tree_sitter::{InputEdit, ParseOptions, Parser, Point};
 
-use super::{LanguageRegistry, SyntaxHighlighter, innermost_bracket_pair_from_tree};
+use super::{LanguageRegistry, SyntaxHighlighter, innermost_bracket_pair_merged};
 
 pub(crate) fn input_highlighter_factory() -> InputHighlighterFactory {
     Rc::new(|language| {
@@ -222,7 +222,7 @@ impl InputHighlighter for TreeSitterInputHighlighter {
         let text = highlighter.text().clone();
         let language = highlighter.language().clone();
         Some(Box::new(move || {
-            innermost_bracket_pair_from_tree(&tree, &text, &language, offset)
+            innermost_bracket_pair_merged(&tree, &text, &language, offset)
                 .map(|(open, close)| (open.start, open.len(), close.start, close.len()))
         }))
     }

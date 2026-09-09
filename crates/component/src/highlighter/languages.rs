@@ -608,6 +608,8 @@ impl Language {
 
         let language = tree_sitter::Language::new(language);
 
+        // `mut` is only exercised with the `tree-sitter-cpp` feature (brackets/indents).
+        #[allow(unused_mut)]
         let mut config = LanguageConfig::new(
             self.name(),
             language,

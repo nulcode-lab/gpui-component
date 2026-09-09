@@ -19,8 +19,8 @@ pub(crate) fn input_highlighter_factory() -> gpui_base::input::InputHighlighterF
 // Native implementation with full tree-sitter support
 #[cfg(feature = "tree-sitter")]
 mod auto_indent;
-#[cfg(feature = "tree-sitter")]
-pub(crate) use auto_indent::suggest_indent;
+#[cfg(test)]
+mod bracket_query_test;
 
 #[cfg(feature = "tree-sitter")]
 mod highlighter;

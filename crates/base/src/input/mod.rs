@@ -13,7 +13,10 @@ pub(crate) const MASK_CHAR: char = '•';
 mod base;
 #[path = "base/blink_cursor.rs"]
 pub(crate) mod blink_cursor;
+// Bracket helpers are re-exported below for `component`; `unreachable_pub`
+// does not track re-export reachability and would flag every item here.
 #[path = "editor/bracket.rs"]
+#[allow(unreachable_pub)]
 mod bracket;
 #[path = "base/change.rs"]
 mod change;

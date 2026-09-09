@@ -83,8 +83,8 @@ pub(crate) struct ReusableInjectionLayer {
     pub(crate) tree: Tree,
 }
 
-struct TextProvider<'a>(&'a Rope);
-struct ByteChunks<'a> {
+pub(crate) struct TextProvider<'a>(pub(crate) &'a Rope);
+pub(crate) struct ByteChunks<'a> {
     cursor: ChunkCursor<'a>,
     node_start: usize,
     node_end: usize,
@@ -557,13 +557,13 @@ impl SyntaxHighlighter {
             }
         }
 
-        result.sort_by(|a, b| a.0.start.cmp(&b.0.start));
+        result.sort_by_key(|item| item.0.start);
         result
     }
 
     pub fn innermost_bracket_pair(&self, cursor: usize) -> Option<(Range<usize>, Range<usize>)> {
         let Some(tree) = &self.tree else { return None };
-        innermost_bracket_pair_impl(tree, &self.text, &self.language, cursor)
+        innermost_bracket_pair_merged(tree, &self.text, &self.language, cursor)
     }
 
     /// Apply only the structural `edit` to the existing tree and update the stored text,
@@ -595,6 +595,89 @@ pub fn innermost_bracket_pair_from_tree(
     cursor: usize,
 ) -> Option<(Range<usize>, Range<usize>)> {
     innermost_bracket_pair_impl(tree, text, language, cursor)
+}
+
+/// Character-level fallback for [`innermost_bracket_pair_impl`].
+///
+/// tree-sitter 0.26 no longer matches query patterns against tokens inside
+/// `ERROR` nodes, but mid-typing code is full of ERROR nodes (an unclosed
+/// `if(...)`, an unterminated string). Scan the raw text with a bracket
+/// stack instead, skipping brackets that sit inside strings or comments
+/// (judged through the syntax tree). Only auto-closable pairs participate;
+/// `<`/`>` stay query-only to avoid relational-operator false positives.
+/// Innermost pair across both engines: the tree-sitter query misses pairs
+/// inside `ERROR` nodes (tree-sitter 0.26), the text scan misses quote and
+/// `<`/`>` pairs. Take whichever pair is smaller (more innermost).
+pub(crate) fn innermost_bracket_pair_merged(
+    tree: &Tree,
+    text: &Rope,
+    language: &SharedString,
+    cursor: usize,
+) -> Option<(Range<usize>, Range<usize>)> {
+    let query_pair = innermost_bracket_pair_impl(tree, text, language, cursor);
+    let scan_pair = innermost_bracket_pair_text_scan(tree, text, cursor);
+    match (query_pair, scan_pair) {
+        (Some(q), Some(sc)) => {
+            let q_size = q.1.start - q.0.start;
+            let sc_size = sc.1.start - sc.0.start;
+            Some(if sc_size < q_size { sc } else { q })
+        }
+        (q, sc) => q.or(sc),
+    }
+}
+
+pub(crate) fn innermost_bracket_pair_text_scan(
+    tree: &Tree,
+    text: &Rope,
+    cursor: usize,
+) -> Option<(Range<usize>, Range<usize>)> {
+    use gpui_base::input::{get_bracket_pair_for_start, is_bracket_end, is_bracket_start, is_comment_or_string};
+
+    let root = tree.root_node();
+    let is_ignored = |pos: usize| -> bool {
+        root.named_descendant_for_byte_range(pos, pos)
+            .is_some_and(|node| is_comment_or_string(node.kind()))
+    };
+
+    let mut stack: Vec<(char, usize)> = Vec::new();
+    let mut best: Option<(Range<usize>, Range<usize>)> = None;
+    let mut best_size = usize::MAX;
+
+    // Walk rope chunks to track byte offsets.
+    let mut byte_offset = 0usize;
+    for chunk in text.chunks() {
+        for c in chunk.chars() {
+            let at = byte_offset;
+            byte_offset += c.len_utf8();
+            if is_bracket_start(c) && !is_ignored(at) {
+                if let Some(pair) = get_bracket_pair_for_start(c) {
+                    if pair.close {
+                        stack.push((c, at));
+                        continue;
+                    }
+                }
+            }
+            if is_bracket_end(c) && !is_ignored(at) {
+                if let Some((open_ch, open_at)) = stack.pop() {
+                    let matched = get_bracket_pair_for_start(open_ch)
+                        .map(|p| p.end)
+                        .is_some_and(|end| end == c);
+                    if !matched {
+                        continue;
+                    }
+                    let open = open_at..open_at + open_ch.len_utf8();
+                    let close = at..at + c.len_utf8();
+                    let contains =
+                        cursor >= open.start && cursor <= close.end;
+                    if contains && close.start - open.start < best_size {
+                        best_size = close.start - open.start;
+                        best = Some((open, close));
+                    }
+                }
+            }
+        }
+    }
+    best
 }
 
 fn innermost_bracket_pair_impl(

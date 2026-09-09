@@ -704,7 +704,14 @@ pub struct NotificationList {
 impl NotificationList {
     pub fn new(_: &mut Window, cx: &mut Context<Self>) -> Self {
         Self {
-            notifications: ToastManager::new(ToastMotion::sonner()),
+            // fork(algocode): slow fade — the stack's unmount timer must stay
+            // in sync with the exit animation (NOTIFICATION_EXIT_DURATION),
+            // otherwise the toast is unmounted before the fade finishes.
+            notifications: ToastManager::new({
+                let mut motion = ToastMotion::sonner();
+                motion.exit_duration = NOTIFICATION_EXIT_DURATION;
+                motion
+            }),
             stacks: Vec::new(),
             focus_handle: cx.focus_handle().tab_stop(true),
             is_advancing: false,

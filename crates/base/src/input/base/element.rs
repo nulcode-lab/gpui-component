@@ -1798,7 +1798,6 @@ impl<M: InputModeKind> Element for TextElement<M> {
         let text = state.text.clone();
         let is_empty = text.len() == 0;
         let placeholder = self.placeholder.clone();
-        let disabled = state.disabled;
 
         let text_style = window.text_style();
         let disabled = state.disabled;

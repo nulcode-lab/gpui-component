@@ -8,7 +8,8 @@ use gpui::{
 };
 use gpui::{
     HighlightStyle, Hitbox, HitboxBehavior, Hsla, InteractiveElement, IntoElement, LayoutId,
-    MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement as _, Path, Pixels, Point, Position,
+    FontWeight, MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement as _, Path, Pixels,
+    Point, Position,
     ShapedLine, SharedString, Size, Style, Styled as _, TextAlign, TextRun, TextStyle,
     UnderlineStyle, Window, fill, point, px, relative, size,
 };
@@ -1655,7 +1656,7 @@ pub(super) struct PrepaintState {
     hover_highlight_path: Option<Path<Pixels>>,
     search_match_paths: Vec<(Path<Pixels>, bool)>,
     document_color_paths: Vec<(Path<Pixels>, Hsla)>,
-    matched_brace_paths: Vec<Path<Pixels>>,
+    matched_brace_glyphs: Vec<(ShapedLine, Point<Pixels>)>,
     hover_definition_hitbox: Option<Hitbox>,
     indent_guides_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
@@ -2093,22 +2094,54 @@ impl<M: InputModeKind> Element for TextElement<M> {
         let document_color_paths =
             self.layout_document_colors(&document_colors, &last_layout, &bounds, cx);
 
-        // Compute matched brace highlight paths
-        let matched_brace_paths = {
+        // Compute matched brace glyphs. The fork paints the matched brackets
+        // as bold accent-colored characters instead of a background box.
+        let matched_brace_glyphs = {
             let state = self.state.read(cx);
-            let mut paths = Vec::new();
+            let mut glyphs = Vec::new();
             if let Some((open_start, open_len, close_start, close_len)) = state.matched_brace_ranges
             {
-                let open_range = open_start..open_start + open_len;
-                let close_range = close_start..close_start + close_len;
-                if let Some(path) = Self::layout_match_range(open_range, &last_layout, &bounds) {
-                    paths.push(path);
-                }
-                if let Some(path) = Self::layout_match_range(close_range, &last_layout, &bounds) {
-                    paths.push(path);
+                let brace_color = state.editor_style.diagnostics.error;
+                let mut font = style.font();
+                font.weight = FontWeight::BOLD;
+                for (start, len) in [(open_start, open_len), (close_start, close_len)] {
+                    let range = start..start + len;
+                    if range.start < last_layout.visible_range_offset.start
+                        || range.end > last_layout.visible_range_offset.end
+                    {
+                        continue;
+                    }
+                    let mut offset_y = last_layout.visible_top;
+                    for (prev_lines_offset, line) in last_layout
+                        .visible_line_byte_offsets
+                        .iter()
+                        .zip(last_layout.lines.iter())
+                    {
+                        let line_size = line.size(last_layout.line_height);
+                        let local = start.saturating_sub(*prev_lines_offset);
+                        if local + len <= line.len() {
+                            if let Some(pos) = line.position_for_index(local, &last_layout, false) {
+                                let brace_text: SharedString =
+                                    state.text.slice(range.clone()).to_string().into();
+                                let runs = vec![TextRun {
+                                    len: brace_text.len(),
+                                    font: font.clone(),
+                                    color: brace_color,
+                                    background_color: None,
+                                    underline: None,
+                                    strikethrough: None,
+                                }];
+                                let shaped =
+                                    window.text_system().shape_line(brace_text, text_size, &runs, None);
+                                glyphs.push((shaped, point(pos.x, offset_y + pos.y)));
+                                break;
+                            }
+                        }
+                        offset_y += line_size.height;
+                    }
                 }
             }
-            paths
+            glyphs
         };
 
         let state = self.state.read(cx);
@@ -2201,7 +2234,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
             selection_paths,
             search_match_paths,
             hover_highlight_path,
-            matched_brace_paths,
+            matched_brace_glyphs,
             hover_definition_hitbox,
             document_color_paths,
             indent_guides_path,
@@ -2364,13 +2397,6 @@ impl<M: InputModeKind> Element for TextElement<M> {
             window.paint_path(path.clone(), color);
         }
 
-        // Paint matched brace highlights. The caret color is the theme accent
-        // the fork's original `theme().primary` mapped to; `selection` is too
-        // faint at 30% opacity on light backgrounds.
-        for path in prepaint.matched_brace_paths.iter() {
-            window.paint_path(path.clone(), editor_style.caret.opacity(0.3));
-        }
-
         // Paint text with inline completion ghost line support
         let mut offset_y = invisible_top_padding;
         let ghost_lines = &prepaint.ghost_lines;
@@ -2436,6 +2462,20 @@ impl<M: InputModeKind> Element for TextElement<M> {
                     offset_y += line_height;
                 }
             }
+        }
+
+        // Paint matched braces in bold accent color on top of the text
+        // (fork style: the highlight is the bracket glyph itself, not a box).
+        let brace_origin_x = origin.x + prepaint.last_layout.line_number_width + scroll_offset;
+        for (glyph, pos) in prepaint.matched_brace_glyphs.iter() {
+            _ = glyph.paint(
+                point(brace_origin_x + pos.x, origin.y + pos.y),
+                line_height,
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            );
         }
 
         // Paint blinking cursors (shared blink state for all carets)

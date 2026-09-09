@@ -6992,7 +6992,11 @@ mod tests {
                             layout.line_height * (row as f32 + 0.5),
                         )
                 };
-                (position(0, 1), position(2, 3))
+                // 1px left so the end pixel cannot land a fraction above the
+                // glyph 3 left edge, where the first-glyph-at-or-after hit
+                // test would resolve one char further when the gutter width
+                // shifts the absolute origin.
+                (position(0, 1), position(2, 3) - point(px(1.), px(0.)))
             });
             // A cached Ctrl-hover definition must not steal a column gesture.
             cx.update(|_, cx| {

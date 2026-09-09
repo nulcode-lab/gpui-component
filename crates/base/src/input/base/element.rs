@@ -991,9 +991,10 @@ impl<M: InputModeKind> TextElement<M> {
         window: &mut Window,
     ) -> (Pixels, usize) {
         let total_lines = text.lines_len();
-        // One extra column beyond the widest line number, so right-aligned
-        // numbers keep a gap from the left edge.
-        let line_number_len = total_lines.max(1).ilog10() as usize + 2;
+        // Exactly as many digits as the widest line number needs (fork: the
+        // extra gap column upstream reserves made the gutter needlessly wide;
+        // LINE_NUMBER_RIGHT_MARGIN already separates numbers from the text).
+        let line_number_len = total_lines.max(1).ilog10() as usize + 1;
 
         let mut line_number_width = if state.mode.line_number() {
             let empty_line_number = window.text_system().shape_line(

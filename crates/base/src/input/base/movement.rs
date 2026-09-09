@@ -215,6 +215,7 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.pause_blink_cursor(cx);
         M::hide_context_menu(self, cx);
         M::clear_inline_completion(self, cx);
+        self.refresh_matching_brace_async(cx);
         cx.notify();
     }
 

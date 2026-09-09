@@ -3646,6 +3646,7 @@ impl ShellRuntime {
                     payload.set("shift", *shift)?;
                 }
                 InputEvent::Change | InputEvent::Focus | InputEvent::Blur => {}
+                InputEvent::TypingRightBrace { .. } | InputEvent::CursorLineChanged { .. } => {}
             }
             handler.call::<_, ()>((
                 payload,

@@ -7,21 +7,26 @@ use quote::quote;
 /// `gpui-kit` is preferred because it re-exports GPUI and is the only direct
 /// dependency required by kit consumers. The `gpui-pre` package fallback
 /// preserves standalone `gpui-component` consumers, including dependencies
-/// that rename that package to `gpui` (the conventional name).
+/// that rename that package to `gpui` (the conventional name). The plain
+/// `gpui` fallback keeps git-fork consumers (algosoft) working.
 pub(crate) fn gpui() -> syn::Result<TokenStream> {
     match crate_name("gpui-kit") {
         Ok(found) => Ok(found_crate_path(found)),
-        Err(kit_error) => crate_name("gpui-pre")
-            .map(found_crate_path)
-            .map_err(|gpui_error| {
-                syn::Error::new(
-                    Span::call_site(),
-                    format!(
-                        "IntoPlot requires a direct dependency on `gpui-kit` or `gpui-pre`: \
-                         gpui-kit lookup failed: {kit_error}; gpui-pre lookup failed: {gpui_error}"
-                    ),
-                )
-            }),
+        Err(kit_error) => match crate_name("gpui-pre") {
+            Ok(found) => Ok(found_crate_path(found)),
+            Err(gpui_error) => {
+                crate_name("gpui").map(found_crate_path).map_err(|plain_error| {
+                    syn::Error::new(
+                        Span::call_site(),
+                        format!(
+                            "IntoPlot requires a direct dependency on `gpui-kit`, `gpui-pre` or \
+                             `gpui`: gpui-kit lookup failed: {kit_error}; gpui-pre lookup \
+                             failed: {gpui_error}; gpui lookup failed: {plain_error}"
+                        ),
+                    )
+                })
+            }
+        },
     }
 }
 

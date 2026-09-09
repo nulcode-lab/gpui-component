@@ -99,3 +99,4 @@ icons/window-close.svg
 icons/window-maximize.svg
 icons/window-minimize.svg
 icons/window-restore.svg
+icons/school.svg

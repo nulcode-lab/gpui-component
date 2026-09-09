@@ -109,14 +109,6 @@ impl LayoutMode {
         }
     }
 
-    /// Get the tab size of the layout (plain text and code editor kinds).
-    pub(super) fn tab_size(&self) -> TabSize {
-        match self {
-            LayoutMode::PlainText { tab, .. } | LayoutMode::CodeEditor { tab, .. } => *tab,
-            _ => TabSize::default(),
-        }
-    }
-
     #[inline]
     pub(super) fn is_auto_grow(&self) -> bool {
         matches!(self, LayoutMode::AutoGrow { .. })

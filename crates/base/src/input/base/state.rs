@@ -1778,7 +1778,7 @@ impl<M: InputModeKind> InputBaseState<M> {
 
                     let basis_row = suggestion
                         .basis_row
-                        .min(self.text.len_lines().saturating_sub(1));
+                        .min(self.text.len_lines(ropey::LineType::LF).saturating_sub(1));
                     let basis_start = self.text.line_start_offset(basis_row);
                     let basis_end = self.text.line_end_offset(basis_row);
                     let basis_text = self.text.slice(basis_start..basis_end).to_string();
@@ -3618,11 +3618,8 @@ impl<M: InputModeKind> InputBaseState<M> {
     }
 
     fn next_char_at(&self, offset: usize) -> Option<char> {
-        if offset >= self.text.len_bytes() {
-            return None;
-        }
-        let char_idx = self.text.byte_to_char(offset);
-        self.text.get_char(char_idx)
+        let char_idx = self.text.offset_to_char_index(offset);
+        (char_idx < self.text.len_chars()).then(|| self.text.char(char_idx))
     }
 
     /// Handle typed bracket/quote characters: autoclose, surround selection,
@@ -3649,7 +3646,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             .highlighter()
             .and_then(|rc| rc.borrow().as_ref().map(|h| h.is_in_string(cursor)))
             .unwrap_or(false);
-        if ch == '"' || ch == ' {
+        if ch == '"' || ch == '\'' {
             if is_in_string {
                 if let Some(next_ch) = self.next_char_at(cursor) {
                     if next_ch == ch {
@@ -3671,7 +3668,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             }
         }
         if let Some(pair) = get_bracket_pair_for_start(ch) {
-            if pair.close && ch != '"' && ch != ' {
+            if pair.close && ch != '"' && ch != '\'' {
                 if is_empty_selection {
                     let insert_text = format!("{}{}", ch, pair.end);
                     self.replace_text_in_range_silent(None, &insert_text, window, cx);
@@ -3708,7 +3705,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             }
         }
         if let Some(_pair) = get_bracket_pair_for_end(ch) {
-            if ch != '"' && ch != ' {
+            if ch != '"' && ch != '\'' {
                 if let Some(next_ch) = self.next_char_at(cursor) {
                     if next_ch == ch {
                         let is_autoclose = self

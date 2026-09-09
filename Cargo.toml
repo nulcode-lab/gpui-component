@@ -57,12 +57,15 @@ gpui-wry = { path = "crates/webview", version = "0.6.0" }
 gpui-component-shell = { path = "crates/component-shell", version = "0.6.0" }
 story = { path = "crates/story" }
 
-gpui = { package = "gpui-pre", version = "0.3.1" }
-gpui_platform = { package = "gpui-pre-platform", version = "0.3.1", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
-gpui_web = { package = "gpui-pre-web", version = "0.3.1" }
-gpui_macros = { package = "gpui-pre-macros", version = "0.3.1" }
-reqwest_client = { package = "gpui-pre-reqwest-client", version = "0.3.1" }
-sum-tree = { package = "gpui-pre-sum-tree", version = "0.3.1" }
+# fork(algosoft): stay on the zed git dependency so downstream [patch]
+# redirections (zed-industries/zed -> algosoft-lab/zed) keep the whole graph
+# on a single gpui; upstream 0.6 moved to the published gpui-pre crates.
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
+gpui_web = { git = "https://github.com/zed-industries/zed" }
+gpui_macros = { git = "https://github.com/zed-industries/zed" }
+reqwest_client = { git = "https://github.com/zed-industries/zed" }
+sum-tree = { git = "https://github.com/zed-industries/zed", package = "sum_tree" }
 reqwest = { package = "gpui-pre-reqwest", version = "0.12.15", default-features = false, features = [
     "charset",
     "http2",
@@ -136,11 +139,11 @@ rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
 smol = { opt-level = 3 }
-gpui-pre = { opt-level = 3 }
-gpui-pre-platform = { opt-level = 3 }
-gpui-pre-macros = { opt-level = 3 }
+gpui = { opt-level = 3 }
+gpui_platform = { opt-level = 3 }
+gpui_macros = { opt-level = 3 }
 tree-sitter = { opt-level = 3 }
-gpui-pre-sum-tree = { opt-level = 3 }
+sum_tree = { opt-level = 3 }
 ropey = { opt-level = 3 }
 lsp-types = { opt-level = 3 }
 gpui-pre-reqwest-client = { opt-level = 3 }

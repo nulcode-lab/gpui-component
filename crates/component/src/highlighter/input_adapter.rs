@@ -12,7 +12,7 @@ use std::{
 use gpui::{HighlightStyle, SharedString, Task};
 use gpui_base::input::{
     EditorState, FoldRange, HighlightStyleResolver, InputEdit as BaseInputEdit, InputHighlighter,
-    InputHighlighterFactory,
+    InputHighlighterFactory, RopeExt as _,
 };
 use ropey::Rope;
 use tree_sitter::{InputEdit, ParseOptions, Parser, Point};
@@ -239,11 +239,8 @@ impl InputHighlighter for TreeSitterInputHighlighter {
 
 /// Next `char` at `offset` in the rope, if any.
 fn next_char_at(text: &Rope, offset: usize) -> Option<char> {
-    if offset >= text.len_bytes() {
-        return None;
-    }
-    let char_idx = text.byte_to_char(offset);
-    text.get_char(char_idx)
+    let char_idx = text.offset_to_char_index(offset);
+    (char_idx < text.len_chars()).then(|| text.char(char_idx))
 }
 
 fn to_tree_sitter_edit(edit: BaseInputEdit) -> InputEdit {

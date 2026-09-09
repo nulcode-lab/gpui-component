@@ -3,28 +3,8 @@ use std::ops::Range;
 use tree_sitter::{Query, QueryCursor, StreamingIterator};
 
 use crate::highlighter::{LanguageConfig, LanguageRegistry, SyntaxHighlighter};
-use gpui_base::input::RopeExt;
+use gpui_base::input::{IndentSuggestion, RopeExt};
 
-/// Indent suggestion result
-#[derive(Debug, Clone)]
-pub struct IndentSuggestion {
-    /// How to adjust indent relative to basis_row: +1 more, 0 same, -1 less
-    pub delta: i32,
-    /// The row whose indent level to use as base
-    pub basis_row: usize,
-    /// If true, insert 2 newlines to split {} onto separate lines
-    pub split_brace: bool,
-}
-
-impl Default for IndentSuggestion {
-    fn default() -> Self {
-        Self {
-            delta: 0,
-            basis_row: 0,
-            split_brace: false,
-        }
-    }
-}
 
 /// Point (row, column) for tree-sitter positions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
